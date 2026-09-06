@@ -37,7 +37,7 @@ type FileMedia =
 /** 同时拥有「渲染态」和「源码态」两种视图的文件类型。预览 / 源码切换是这类文件的
  *  共有属性，切换状态按类型各自记忆（内存态，不持久化）。 */
 type DualViewType = Extract<FileMedia['type'], 'markdown' | 'html' | 'svg'>;
-type ViewMode = 'preview' | 'source';
+type ViewMode = 'preview' | 'source' | 'edit';
 
 /** 视图状态。`loading` / `error` 也携带 `path` 与（可继承的）`session`，这样面包屑在
  *  同一会话内导航时不会闪成「未知会话」。 */

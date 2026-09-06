@@ -832,6 +832,8 @@ vfs:
   inlineLoadFailed: "$1 — $2"
   preview: "預覽"
   source: "原始碼"
+  edit: "編輯"
+  saveFailed: "儲存失敗"
   viewMode: "檢視模式"
   location: "目前位置"
   # 麵包屑裡代替原始路徑顯示的根目錄錨點

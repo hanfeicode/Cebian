@@ -845,6 +845,8 @@ vfs:
   inlineLoadFailed: "$1 — $2"
   preview: "Preview"
   source: "Source"
+  edit: "Edit"
+  saveFailed: "Save failed"
   viewMode: "View mode"
   location: "Location"
   # Semantic root anchors shown in the breadcrumb instead of raw paths

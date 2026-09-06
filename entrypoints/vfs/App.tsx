@@ -18,6 +18,7 @@ import { DirView } from './ui/DirView';
 import { FileView } from './ui/FileView';
 import { Toolbar } from './ui/Toolbar';
 import type { DualViewType, ViewMode, ViewState } from './types';
+import type { SaveStatus } from './ui/views/MarkdownEditor';
 
 const BRAND_ICON = browser.runtime.getURL('/icon/32.png' as never);
 
@@ -31,6 +32,9 @@ export default function App() {
   // 预览 / 源码切换按文件类型各自记忆：连续浏览多个 .md 时保持用户选的视图，
   // 切到别的双视图类型互不影响。内存态，不持久化。
   const [viewModes, setViewModes] = useState<Partial<Record<DualViewType, ViewMode>>>({});
+  // 编辑模式追踪：editedContent 保存用户最新编辑内容（供预览同步），saveStatus 显示保存状态。
+  const [editedContent, setEditedContent] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
 
   // ── 主题同步 ──
   useEffect(() => {
@@ -51,6 +55,13 @@ export default function App() {
     const handler = (e: MediaQueryListEvent) => applyTheme(e.matches ? 'dark' : 'light');
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
+  }, [theme]);
+
+  // 计算当前是否暗色主题，供 CodeMirror 编辑器使用
+  const isDark = useMemo(() => {
+    if (theme === 'dark') return true;
+    if (theme === 'light') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
   }, [theme]);
 
   // ── 按 hash 加载路径 ──
@@ -81,6 +92,9 @@ export default function App() {
       const controller = new AbortController();
       abortRef.current = controller;
       const path = getHashPath();
+      // 导航到新文件时重置编辑状态
+      setEditedContent(null);
+      setSaveStatus('idle');
       // 加载态继承上一视图的会话标签（仍在同一会话内时），面包屑不会闪成「未知会话」。
       setView((prev) => ({
         kind: 'loading',
@@ -172,10 +186,11 @@ export default function App() {
             onModeChange={(next) => dualType && setViewModes((prev) => ({ ...prev, [dualType]: next }))}
             isDownloading={isDownloading}
             onDownload={handleDownload}
+            saveStatus={mode === 'edit' ? saveStatus : undefined}
           />
         </header>
 
-        <main className="flex-1 min-h-0 overflow-auto relative">
+        <main className={`flex-1 min-h-0 relative ${mode === 'edit' ? 'overflow-hidden' : 'overflow-auto'}`}>
           {view.kind === 'loading' && (
             <div className="flex items-center justify-center py-20">
               <Spinner className="size-5 text-primary" aria-label={t('common.loading')} />
@@ -193,7 +208,17 @@ export default function App() {
             </div>
           )}
 
-          {view.kind === 'file' && <FileView path={view.path} media={view.media} mode={mode} />}
+          {view.kind === 'file' && (
+            <FileView
+              path={view.path}
+              media={view.media}
+              mode={mode}
+              isDark={isDark}
+              editedContent={editedContent ?? undefined}
+              onContentChange={setEditedContent}
+              onSaveStatus={setSaveStatus}
+            />
+          )}
 
           {view.kind === 'error' && (
             <div className="flex flex-col items-center justify-center py-20 gap-3">

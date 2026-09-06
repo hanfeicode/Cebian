@@ -5,6 +5,8 @@ import { formatBytes } from '@/lib/utils';
 import type { FileMedia, ViewMode } from '../types';
 import { CodeView } from './views/CodeView';
 import { HtmlPreview } from './views/HtmlPreview';
+import { MarkdownEditor } from './views/MarkdownEditor';
+import type { SaveStatus } from './views/MarkdownEditor';
 
 import { MediaView } from './views/MediaView';
 import { PdfView } from './views/PdfView';
@@ -17,17 +19,36 @@ const MarkdownView = lazy(() => import('./views/MarkdownView').then((m) => ({ de
 
 /** 文件正文的分发器：按 media 类型选视图。没有外框、没有自己的头——文件名在面包屑，
  *  元信息与操作在页头 Toolbar，正文直接落在主区域（主区域是唯一滚动容器）。 */
-function FileView({ path, media, mode }: { path: string; media: FileMedia; mode: ViewMode }) {
+function FileView({ path, media, mode, isDark, editedContent, onContentChange, onSaveStatus }: {
+  path: string;
+  media: FileMedia;
+  mode: ViewMode;
+  isDark: boolean;
+  editedContent?: string;
+  onContentChange?: (content: string) => void;
+  onSaveStatus?: (status: SaveStatus) => void;
+}) {
   const name = path.split('/').pop() ?? path;
 
   switch (media.type) {
     case 'text':
       return <TextView content={media.content} />;
     case 'markdown':
+      if (mode === 'edit') {
+        return (
+          <MarkdownEditor
+            content={editedContent ?? media.content}
+            path={path}
+            isDark={isDark}
+            onContentChange={onContentChange ?? (() => {})}
+            onSaveStatus={onSaveStatus ?? (() => {})}
+          />
+        );
+      }
       return mode === 'preview'
         ? (
           <Suspense fallback={<div className="flex justify-center py-20"><Spinner className="size-5 text-primary" aria-label={t('common.loading')} /></div>}>
-            <MarkdownView content={media.content} />
+            <MarkdownView content={editedContent ?? media.content} />
           </Suspense>
         )
         : <CodeView content={media.content} lines={media.lines} bytes={media.size} lang="markdown" />;

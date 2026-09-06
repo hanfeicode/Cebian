@@ -1,4 +1,4 @@
-import { Code, Download, Eye, Link, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Code, Download, Eye, Link, Loader2, Pencil, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { CopyButton } from '@/components/common/CopyButton';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { languageName } from '../lib/highlight';
 import { formatBytes } from '@/lib/utils';
 import { supportsHtmlPreviewScripts } from '../lib/preview-capabilities';
 import type { FileMedia, ViewMode, ViewState } from '../types';
+import type { SaveStatus } from './views/MarkdownEditor';
 
 interface ToolbarProps {
   view: ViewState;
@@ -18,6 +19,8 @@ interface ToolbarProps {
   onModeChange: (mode: ViewMode) => void;
   isDownloading: boolean;
   onDownload: () => void;
+  /** 编辑模式下的保存状态；非编辑模式或非 markdown 文件时为 undefined。 */
+  saveStatus?: SaveStatus;
 }
 
 function ModeButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
@@ -103,17 +106,26 @@ function describe(view: ViewState, mode: ViewMode | undefined): React.ReactNode 
   );
 }
 
-/** 页头右侧：元信息 │ 预览/源码 · 复制路径 · 复制内容 · 下载。
+/** 页头右侧：元信息 │ 预览/源码/编辑 · 复制路径 · 复制内容 · 下载。
  *  顺序按「被动信息在左、操作在右、越不可逆越靠右」排。
  *  加载中路径已知，所以「复制路径」保持挂载；元信息 / 切换 / 复制内容 / 下载要等内容
  *  到了才知道该不该显示。下载中即使 view 已切到 loading 也保持按钮挂载，否则用户会
  *  失去忙碌指示。复制内容始终复制源码（与模式无关），那才是用户要贴到别处的东西。 */
-function Toolbar({ view, mode, onModeChange, isDownloading, onDownload }: ToolbarProps) {
-  const meta = describe(view, mode);
+function Toolbar({ view, mode, onModeChange, isDownloading, onDownload, saveStatus }: ToolbarProps) {
+  const isMarkdown = view.kind === 'file' && view.media.type === 'markdown';
+  const meta = mode === 'edit' ? null : describe(view, mode);
   // error 态也保留「复制路径」：用户要把打不开的路径贴出去反馈时正需要它。
   const path = view.path;
   const loaded = view.kind === 'dir' || view.kind === 'file';
   const textContent = view.kind === 'file' && 'content' in view.media ? view.media.content : null;
+
+  // 编辑模式下显示保存状态
+  const saveStatusLabel = saveStatus === 'saving' ? t('settings.editor.saving')
+    : saveStatus === 'error' ? t('vfs.saveFailed')
+    : saveStatus === 'unsaved' ? t('settings.editor.unsaved')
+    : saveStatus === 'saved' ? t('settings.editor.saved')
+    : '';
+  const saveStatusClass = saveStatus === 'error' ? 'text-destructive' : 'text-muted-foreground';
 
   return (
     <div className="flex items-center gap-2 shrink-0">
@@ -124,10 +136,20 @@ function Toolbar({ view, mode, onModeChange, isDownloading, onDownload }: Toolba
         </>
       )}
 
+      {mode === 'edit' && saveStatusLabel && (
+        <>
+          <span className={`inline-flex items-center text-xs tabular-nums whitespace-nowrap ${saveStatusClass}`}>{saveStatusLabel}</span>
+          <div className="h-4 w-px bg-border" />
+        </>
+      )}
+
       {mode && (
         <div role="group" aria-label={t('vfs.viewMode')} className="inline-flex p-0.5 rounded-md border border-border bg-muted">
           <ModeButton active={mode === 'preview'} onClick={() => onModeChange('preview')} icon={<Eye className="size-3.5" />} label={t('vfs.preview')} />
           <ModeButton active={mode === 'source'} onClick={() => onModeChange('source')} icon={<Code className="size-3.5" />} label={t('vfs.source')} />
+          {isMarkdown && (
+            <ModeButton active={mode === 'edit'} onClick={() => onModeChange('edit')} icon={<Pencil className="size-3.5" />} label={t('vfs.edit')} />
+          )}
         </div>
       )}
 

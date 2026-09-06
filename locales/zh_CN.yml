@@ -833,6 +833,8 @@ vfs:
   inlineLoadFailed: "$1 — $2"
   preview: "预览"
   source: "源码"
+  edit: "编辑"
+  saveFailed: "保存失败"
   viewMode: "视图模式"
   location: "当前位置"
   # 面包屑里代替裸路径显示的根目录锚点
