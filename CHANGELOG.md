@@ -38,6 +38,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The Settings navigation collapses 11 flat entries into 3 groups of 9: Connect (AI providers, MCP servers), Customize (Chat, Prompts, Skills, Memory, Page interaction) and System (Data, About). The former Instructions and Advanced sections merge into Chat, and Backup & Restore plus Filesystem merge into Data; every individual setting stays as it was. In the narrow sidepanel the active section's icon expands to show its name and groups are separated by dividers; the wide layout shows group headings in the sidebar. Old `#/instructions`, `#/advanced`, `#/backup` and `#/storage` links redirect to the merged sections
 - The default title of a new chat is now consistently the first message collapsed to one line and cut to 50 characters, ending in … when truncated (previously the sidepanel used `...` and "Continue in sidepanel" cut at 48)
 
+### 修复 / Fixed
+
+- 调用 MCP 工具的对话在回答完成几十秒后「消失」、只剩转圈的工具卡片：MCP 服务端不返回 `structuredContent` 时，工具结果里会多出一个值为 undefined 的字段，导致该结果及本轮之后的所有消息都无法写入会话存储；扩展后台被浏览器回收后重新打开，就只剩下第一次工具调用之前的内容。现已修正字段写法，并在存储层递归剔除这类字段、对仍不合规的消息用 JSON 归一化后再写入，不再让一条消息卡住整轮对话的保存 ([#74](https://github.com/maotoumao/Cebian/issues/74))
+
+- Replies that used an MCP tool "vanished" tens of seconds after finishing, leaving only spinning tool cards: when the MCP server returned no `structuredContent`, the tool result carried a field whose value was undefined, so that result and every later message of the turn could not be written to chat storage; once the browser suspended the extension's background worker and it came back, only the content before the first tool call was left. The field is now written correctly, the storage layer strips such fields recursively, and a message that still fails the durability check is JSON-normalized before writing, so one message can no longer block saving the rest of the turn ([#74](https://github.com/maotoumao/Cebian/issues/74))
+
 ## 1.7.0 - 2026-09-05
 
 ### 新增 / Added

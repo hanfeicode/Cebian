@@ -3,7 +3,7 @@
 // transcript 的真相在 mutation 日志（会话树）里；`sessions` 行只承载列表元数据
 // （v1 遗留的 `messages` 影子字段仅作迁移保险，不再更新）。
 
-import { uuidv7, type AgentMessage, type Session } from '@earendil-works/pi-agent-core';
+import { SessionError, uuidv7, type AgentMessage, type Session } from '@earendil-works/pi-agent-core';
 import {
   applySessionsTransactional,
   getSession,
@@ -26,6 +26,7 @@ import {
   type BranchEntryInfo,
 } from '@/lib/agent/session-projection';
 import { sanitizeAgentMessages } from '@/lib/agent/message-helpers';
+import { omitUndefinedDeep } from '@/lib/utils';
 import { planSessionWrites } from '@/lib/backup/sources/sessions';
 import type { RestoreStrategy } from '@/lib/backup/types';
 import type { ApplySessionsResult } from '@/lib/backup/sources/sessions';
@@ -54,7 +55,15 @@ interface CreateSessionFields {
 
 /**
  * 树 append 入口：一条消息按共享映射（`messageToEntryBody`）落成 entry。写入前过
- * 一道 sanitize——append-only 日志一旦冻结坏数据即永久化（issue #43 防线）。
+ * 两道整形——sanitize（issue #43 防线：append-only 日志一旦冻结坏数据即永久化）与
+ * 深度剔除 undefined 字段（issue #74：pi 的 durable payload 契约拒绝任意深度的 undefined，
+ * 而工具 `details` 来自第三方，形状不可控；对所有角色生效，compactionSummary 的
+ * retainedTail 里同样带着整条 toolResult）。
+ *
+ * 仍被 pi 拒绝的消息（NaN、非普通对象、函数、数组元素里的 undefined 等）会以 JSON 往返
+ * 后的**有损**副本落库（NaN → null、Date → 字符串、函数丢弃）并打 warn，而不是让这条消息
+ * 卡住整轮对话的保存——syncTail 的水位线停在一条确定性失败的消息上，本轮之后的所有消息
+ * 都不再持久化，这正是 issue #74 的放大机制。JSON 也无法表达（如循环引用）才抛出原错误。
  * 返回新 entry 的 id（供编排层维护投影对齐表）。
  */
 async function appendSessionMessage(
@@ -62,8 +71,38 @@ async function appendSessionMessage(
   message: AgentMessage,
 ): Promise<string> {
   const [clean] = sanitizeAgentMessages([message]);
-  const entry = await tree.appendEntry({ ...messageToEntryBody(clean), id: uuidv7() }, 'main');
-  return entry.id;
+  const append = async (payload: AgentMessage): Promise<string> =>
+    (await tree.appendEntry({ ...messageToEntryBody(payload), id: uuidv7() }, 'main')).id;
+
+  let durable = clean;
+  try {
+    durable = omitUndefinedDeep(clean);
+  } catch (error) {
+    // 归一自身递归过深栈溢出：保留未归一的 clean 继续交给 entry 映射、pi 的 payload 校验
+    // 和存储层决定是否接受，不写入半归一的结果；后续错误仍按下面的规则分类
+    if (!(error instanceof RangeError)) throw error;
+    console.warn('[session-store] omitUndefinedDeep overflowed, persisting the message as-is:', error.message);
+  }
+  try {
+    return await append(durable);
+  } catch (error) {
+    if (!(error instanceof SessionError) || error.code !== 'invalid_payload') throw error;
+    let fallback: AgentMessage;
+    try {
+      fallback = JSON.parse(JSON.stringify(clean)) as AgentMessage;
+    } catch (jsonError) {
+      // 兜底也失败（循环引用、BigInt 等）：记下原因再抛 pi 的原错误，否则链上只剩一句泛化的
+      // "contains a cycle"，看不出兜底曾被尝试过
+      console.warn('[session-store] JSON fallback failed:', jsonError);
+      throw error;
+    }
+    const toolName = 'toolName' in clean && typeof clean.toolName === 'string' ? ` (${clean.toolName})` : '';
+    console.warn(
+      `[session-store] ${clean.role}${toolName} message rejected as durable payload, persisting a JSON-normalized copy:`,
+      error.message,
+    );
+    return append(fallback);
+  }
 }
 
 class SessionStore {
