@@ -18,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## 1.7.1 - 2026-09-15
+
 ### 新增 / Added
 
 - 新增「设置 → 对话 → 联网搜索」：可调整 Bing、Brave、Google、DuckDuckGo、百度的顺序与启停，修改搜索地址、抽取脚本和适用场景，也可添加自定义引擎（如 Kagi、Startpage、自建 SearXNG）。AI 改用 `web_search` 工具取得标题、链接和摘要，不再自行拼接搜索地址、逐个打开引擎结果页；工具默认按配置顺序尝试，支持优先使用指定引擎，被拦截、没有结果或执行失败时自动尝试其余引擎，都没有结果时汇总各引擎的情况 ([#63](https://github.com/maotoumao/Cebian/issues/63))
